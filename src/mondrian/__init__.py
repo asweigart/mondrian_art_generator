@@ -5,6 +5,7 @@
 
 __version__ = '0.0.1'
 
+from PIL import Image, ImageDraw
 import random
 import logging
 logging.basicConfig(filename='mondrian_log.txt', level=logging.DEBUG, format='%(asctime)s - %(message)s')
@@ -16,183 +17,155 @@ YELLOW = 3
 BLUE = 4
 COLOR_MAPPING = {WHITE: 'white', BLACK: 'black', RED: 'red', YELLOW: 'yellow', BLUE: 'blue'}
 
-def createMondrianArt():
-    imageNumber = 0
-    logging.debug('Starting painting #%s' % (imageNumber))
-    WIDTH, HEIGHT = 200, 200
-    MIN_X_INCREASE = 15
-    MAX_X_INCREASE = 45
-    MIN_Y_INCREASE = 15
-    MAX_Y_INCREASE = 45
+def createMondrianArt(filename, width, height, min_x_increase, max_x_increase, min_y_increase, max_y_increase, numPaintedRects, numDeletedSegments):
+    logging.debug('Starting painting %s...' % (filename))
+    logging.debug('width, height = %s, %s' % (width, height))
+    logging.debug('min_x_increase, max_x_increase = %s, %s' % (min_x_increase, max_x_increase))
+    logging.debug('min_y_increase, max_y_increase = %s, %s' % (min_y_increase, max_y_increase))
+    logging.debug('numPaintedRects = %s' % (numPaintedRects))
+    logging.debug('numDeletedSegments  = %s' % (numDeletedSegments))
 
-    numberOfRectanglesToPaint = 12
-    numberOfSegmentsToDelete = 600
-
-    logging.debug('WIDTH, HEIGHT = %s, %s' % (WIDTH, HEIGHT))
-    logging.debug('MIN_X_INCREASE, MAX_X_INCREASE = %s, %s' % (MIN_X_INCREASE, MAX_X_INCREASE))
-    logging.debug('MIN_Y_INCREASE, MAX_Y_INCREASE = %s, %s' % (MIN_Y_INCREASE, MAX_Y_INCREASE))
-
-    print('Image #%s, %sx%s' % (imageNumber, WIDTH, HEIGHT))
-
-    # Pre-populate the board with blank spaces:
-    board = {}
-    for x in range(WIDTH):
-        for y in range(HEIGHT):
-            board[(x, y)] = WHITE
+    # Pre-populate the canvas with white space:
+    canvas = {} # The data structure that stores the pixel info is a dictionary with (x, y) tuple keys.
+    for x in range(width):
+        for y in range(height):
+            canvas[(x, y)] = WHITE
 
     # Generate vertical lines:
-    numberOfLines = 0
-    x = random.randint(MIN_X_INCREASE, MAX_X_INCREASE)
-    while x < WIDTH - MIN_X_INCREASE:
-        numberOfLines += 1
-        for y in range(HEIGHT):
-            board[(x, y)] = BLACK
-        x += random.randint(MIN_X_INCREASE, MAX_X_INCREASE)
+    x = random.randint(min_x_increase, max_x_increase)
+    while x < width - min_x_increase: # Keep generating vertical lines until x gets close to the right edge.
+        for y in range(height): # "Draw" a vertical line to the canvas data structure.
+            canvas[(x, y)] = BLACK
+        x += random.randint(min_x_increase, max_x_increase)
 
     # Generate horizontal lines:
-    y = random.randint(MIN_Y_INCREASE, MAX_Y_INCREASE)
-    while y < HEIGHT - MIN_Y_INCREASE:
-        numberOfLines += 1
-        for x in range(WIDTH):
-            board[(x, y)] = BLACK
-        y += random.randint(MIN_Y_INCREASE, MAX_Y_INCREASE)
-    logging.debug('numberOfRectanglesToPaint = %s' % (numberOfRectanglesToPaint))
-    logging.debug('numberOfSegmentsToDelete  = %s' % (numberOfSegmentsToDelete))
+    y = random.randint(min_y_increase, max_y_increase)
+    while y < height - min_y_increase: # Keep generating horizontal lines until y gets close to the bottom edge.
+        for x in range(width): # # "Draw" a horizontal line to the canvas data structure.
+            canvas[(x, y)] = BLACK
+        y += random.randint(min_y_increase, max_y_increase)
 
-    # Randomly select points and try to remove them.
-    segmentDeleteAttempts = 0
-    print('    Deleting up to %s segments...' % (numberOfSegmentsToDelete))
-    for i in range(numberOfSegmentsToDelete):
-        while True:
-            breakAgain = False
-            segmentDeleteAttempts += 1
-            if segmentDeleteAttempts == numberOfSegmentsToDelete:
-                breakAgain = True
-                break # It's too hard to find a deleteable segment, so stop trying.
+    # Randomly select points and try to delete a segment.
+    for i in range(numDeletedSegments):
+        failedAttemptsToDeleteSegment = 0
+        while failedAttemptsToDeleteSegment < 500: # Give up trying to find a segment to delete if we fail 500 times in a row.
+            failedAttemptsToDeleteSegment += 1
 
             # Get a random start point on an existing segment:
-            startx = random.randint(1, WIDTH - 2)
-            starty = random.randint(1, HEIGHT - 2)
-            if board[(startx, starty)] == WHITE:
-                continue
+            startx = random.randint(1, width - 2)
+            starty = random.randint(1, height - 2)
+            if canvas[(startx, starty)] == WHITE:
+                continue # This random start point is not on a segment, so get a new rando start point.
 
             # Find out if we're on a vertical or horizontal segment:
-            if board[(startx - 1, starty)] == board[(startx + 1, starty)] == WHITE:
+            if canvas[(startx - 1, starty)] == canvas[(startx + 1, starty)] == WHITE:
                 orientation = 'vertical'
-            elif board[(startx, starty - 1)] == board[(startx, starty + 1)] == WHITE:
+            elif canvas[(startx, starty - 1)] == canvas[(startx, starty + 1)] == WHITE:
                 orientation = 'horizontal'
             else:
-                # The start point is on an intersection, so get a new random start point:
-                continue
+                continue # The start point is on an intersection, so get a new random start point.
 
-            pointsToDelete = [(startx, starty)]
+            pointsToDelete = [(startx, starty)] # The (x, y) points of the segment are recorded in pointsToDelete to delete later.
 
-            canDeleteSegment = True
+            foundTIntersection = True
             if orientation == 'vertical':
-                # Go up one path from the start point, and see if we can remove this segment:
-                for changey in (-1, 1):
+                for changey in (-1, 1): # On the first iteration, we move up, next iteration we move down.
                     y = starty
-                    while 0 < y < HEIGHT - 1:
-                        y += changey
-                        if board[(startx - 1, y)] == board[(startx + 1, y)] == BLACK:
+                    while 0 < y < height - 1:
+                        y += changey # Continue moving until we find a four-way intersection, T-intersection, or edge.
+                        if canvas[(startx - 1, y)] == canvas[(startx + 1, y)] == BLACK:
+                            # The pixels to the left and right of (startx, y) are black.
                             # We've found a four-way intersection.
                             break
-                        elif ((board[(startx - 1, y)] == WHITE and
-                               board[(startx + 1, y)] == BLACK) or
-                              (board[(startx - 1, y)] == BLACK and
-                               board[(startx + 1, y)] == WHITE)):
-                            # We've found a T-intersection; we can't delete this segment:
-                            canDeleteSegment = False
+                        elif ((canvas[(startx - 1, y)] == WHITE and
+                               canvas[(startx + 1, y)] == BLACK) or
+                              (canvas[(startx - 1, y)] == BLACK and
+                               canvas[(startx + 1, y)] == WHITE)):
+                            # One pixel to the left or right of (startx, y) is black.
+                            # We've found a T-intersection; we can't delete this segment.
+                            foundTIntersection = False
                             break
                         else:
                             pointsToDelete.append((startx, y))
 
             elif orientation == 'horizontal':
-                # Go up one path from the start point, and see if we can remove this segment:
-                for changex in (-1, 1):
+                for changex in (-1, 1): # On the first iteration, we move left, next iteration we move right.
                     x = startx
-                    while 0 < x < WIDTH - 1:
-                        x += changex
-                        if board[(x, starty - 1)] == board[(x, starty + 1)] == BLACK:
+                    while 0 < x < width - 1:
+                        x += changex # Continue moving until we find a four-way intersection, T-intersection, or edge.
+                        if canvas[(x, starty - 1)] == canvas[(x, starty + 1)] == BLACK:
+                            # The pixels above and below of (x, starty) are black.
                             # We've found a four-way intersection.
                             break
-                        elif ((board[(x, starty - 1)] == WHITE and
-                               board[(x, starty + 1)] == BLACK) or
-                              (board[(x, starty - 1)] == BLACK and
-                               board[(x, starty + 1)] == WHITE)):
-                            # We've found a T-intersection; we can't delete this segment:
-                            canDeleteSegment = False
+                        elif ((canvas[(x, starty - 1)] == WHITE and
+                               canvas[(x, starty + 1)] == BLACK) or
+                              (canvas[(x, starty - 1)] == BLACK and
+                               canvas[(x, starty + 1)] == WHITE)):
+                            # One pixel above or below of (x, starty) is black.
+                            # We've found a T-intersection; we can't delete this segment.
+                            foundTIntersection = False
                             break
                         else:
+                            # This is a point we can delete (if we can delete this segment).
                             pointsToDelete.append((x, starty))
-            if not canDeleteSegment:
-                continue # Get a new random start point.
-            break # Move on to delete the segment.
-        if breakAgain:
-            break
 
-        # If we can delete this segment, set all the points to white:
+            if not foundTIntersection:
+                # A T-intersection means we can't delete this segment.
+                # Start over and get a new random start point.
+                continue
+            else:
+                break # Move on to delete the segment.
+
+        # If we can delete this segment, set all the points in the segment to white:
         for x, y in pointsToDelete:
-            board[(x, y)] = WHITE
+            canvas[(x, y)] = WHITE
 
-    # Add the border lines:
-    for x in range(WIDTH):
-        board[(x, 0)] = BLACK # Top border.
-        board[(x, HEIGHT - 1)] = BLACK # Bottom border.
-    for y in range(HEIGHT):
-        board[(0, y)] = BLACK # Left border.
-        board[(WIDTH - 1, y)] = BLACK # Right border.
+    # Add the border lines at the top, bottom, left, and right edges:
+    for x in range(width):
+        canvas[(x, 0)] = BLACK # Top border.
+        canvas[(x, height - 1)] = BLACK # Bottom border.
+    for y in range(height):
+        canvas[(0, y)] = BLACK # Left border.
+        canvas[(width - 1, y)] = BLACK # Right border.
 
-    # Paint the rectangles:
-    rectanglePaintAttempts = 0
-    print('    Painting up to %s rectangles...' % (numberOfRectanglesToPaint))
-    #input()
-    for i in range(numberOfRectanglesToPaint):
-        while True:
-            breakAgain = False
-            rectanglePaintAttempts += 1
-            #print(rectanglePaintAttempts)
-            if rectanglePaintAttempts == numberOfRectanglesToPaint:
-                breakAgain = True
-                break # It's too hard to find a paintable rectangle, so stop trying.
+    # Paint some of the rectangles:
+    for i in range(numPaintedRects):
+        failedAttemptsToPaintRectangle = 0
+        while failedAttemptsToPaintRectangle < 500:
+            failedAttemptsToPaintRectangle += 1
 
-            startx = random.randint(1, WIDTH - 2)
-            starty = random.randint(1, HEIGHT - 2)
+            startx = random.randint(1, width - 2)
+            starty = random.randint(1, height - 2)
 
-            if board[(startx, starty)] != WHITE:
+            if canvas[(startx, starty)] != WHITE:
                 continue # Get a new random start point.
             else:
                 break
-
-        if breakAgain:
-            break
 
         # Flood fill algorithm:
         colorToPaint = random.choice([RED, YELLOW, BLUE, BLACK])
         pointsToPaint = set([(startx, starty)])
         while len(pointsToPaint) > 0:
             x, y = pointsToPaint.pop()
-            board[(x, y)] = colorToPaint
-            if board[(x - 1, y)] == WHITE:
+            canvas[(x, y)] = colorToPaint
+            if canvas[(x - 1, y)] == WHITE:
                 pointsToPaint.add((x - 1, y))
-            if board[(x + 1, y)] == WHITE:
+            if canvas[(x + 1, y)] == WHITE:
                 pointsToPaint.add((x + 1, y))
-            if board[(x, y - 1)] == WHITE:
+            if canvas[(x, y - 1)] == WHITE:
                 pointsToPaint.add((x, y - 1))
-            if board[(x, y + 1)] == WHITE:
+            if canvas[(x, y + 1)] == WHITE:
                 pointsToPaint.add((x, y + 1))
 
-    # Draw the board data structure:
-    print('    Writing data to image...')
-    from PIL import Image, ImageDraw
-    im = Image.new('RGB', (WIDTH, HEIGHT), 'white')
+    # Draw the image based on the `canvas` data structure:
+    im = Image.new('RGB', (width, height), 'white')
     draw = ImageDraw.Draw(im)
-    for y in range(HEIGHT):
-        for x in range(WIDTH):
-            draw.point((x, y), COLOR_MAPPING[board[(x, y)]])
+    for y in range(height):
+        for x in range(width):
+            draw.point((x, y), COLOR_MAPPING[canvas[(x, y)]])
 
-    im = im.resize((WIDTH * 4, HEIGHT * 4))
-    im.save('mondrian%s.png' % (imageNumber))
+    im = im.resize((width * 5, height * 5))
+    im.save(filename)
 
 
 
