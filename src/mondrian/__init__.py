@@ -17,7 +17,7 @@ YELLOW = 3
 BLUE = 4
 COLOR_MAPPING = {WHITE: 'white', BLACK: 'black', RED: 'red', YELLOW: 'yellow', BLUE: 'blue'}
 
-def createMondrianArt(filename, width, height, min_x_increase, max_x_increase, min_y_increase, max_y_increase, numPaintedRects, numDeletedSegments):
+def createMondrianArt(filename, width, height, min_x_increase, max_x_increase, min_y_increase, max_y_increase, numPaintedRects, numDeletedSegments, scale):
     logging.debug('Starting painting %s...' % (filename))
     logging.debug('width, height = %s, %s' % (width, height))
     logging.debug('min_x_increase, max_x_increase = %s, %s' % (min_x_increase, max_x_increase))
@@ -164,7 +164,7 @@ def createMondrianArt(filename, width, height, min_x_increase, max_x_increase, m
         for x in range(width):
             draw.point((x, y), COLOR_MAPPING[canvas[(x, y)]])
 
-    im = im.resize((width * 5, height * 5))
+    im = im.resize((width * scale, height * scale))
     im.save(filename)
 
 
